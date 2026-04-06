@@ -1,0 +1,21 @@
+{
+    "manifest_version": 3,
+    "name": "FormFill AI",
+    "version": "1.0",
+    "description": "AI-powered form filling",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting"
+    ],
+    "content_scripts": [
+        {
+            "js": [
+                "content.js"
+            ]
+        }
+    ],
+    "action": {
+        "default_popup": "form_input.html"
+    }
+}
