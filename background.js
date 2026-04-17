@@ -1,6 +1,6 @@
-const GEMINI_API_KEY = "AIzaSyCx2NEUWzWhJ5EXOefePDEW8bLnG8IHzhs";
 const DEFAULT_MODEL = "gemini-3-flash-preview";
 const MIN_CAPTURE_INTERVAL_MS = 1200;
+const GEMINI_API_KEY_STORAGE_KEY = "geminiApiKey";
 
 let captureQueue = Promise.resolve();
 let lastCaptureAt = 0;
@@ -77,6 +77,7 @@ async function generateGeminiPlan(payload = {}) {
   const model = payload.model || DEFAULT_MODEL;
   const prompt = String(payload.prompt || "").trim();
   const screenshots = Array.isArray(payload.screenshots) ? payload.screenshots : [];
+  const geminiApiKey = await getGeminiApiKey();
 
   if (!prompt) {
     throw new Error("Gemini 프롬프트가 비어 있습니다.");
@@ -93,7 +94,7 @@ async function generateGeminiPlan(payload = {}) {
   ];
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
     {
       method: "POST",
       headers: {
@@ -131,6 +132,17 @@ async function generateGeminiPlan(payload = {}) {
     console.error("FormFill AI: Gemini 원본 응답", text);
     throw new Error("Gemini 응답 JSON 파싱에 실패했습니다.");
   }
+}
+
+async function getGeminiApiKey() {
+  const result = await chrome.storage.local.get([GEMINI_API_KEY_STORAGE_KEY]);
+  const apiKey = String(result[GEMINI_API_KEY_STORAGE_KEY] || "").trim();
+
+  if (!apiKey) {
+    throw new Error("Gemini API 키가 저장되어 있지 않습니다. 팝업에서 API 키를 입력해 주세요.");
+  }
+
+  return apiKey;
 }
 
 function extractResponseText(data) {

@@ -521,6 +521,12 @@ ${JSON.stringify(serializedInputs, null, 2)}
     return candidates.some((candidate) => candidate === normalizedValue || candidate.includes(normalizedValue));
   }
 
+  /**
+   * input type select의 options를 탐색해 value와 일치하는 옵션 체크
+   * @param {Element} element 
+   * @param {String} value 
+   * @returns 
+   */
   applySelectValue(element, value) {
     const target = this.normalizeText(value);
     const options = Array.from(element.options || []);
