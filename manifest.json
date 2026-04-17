@@ -3,13 +3,26 @@
     "name": "FormFill AI",
     "version": "1.0",
     "description": "AI-powered form filling",
+    "icons": {
+        "128": "images/formfill-ai_icon.png"
+    },
     "permissions": [
         "storage",
         "activeTab",
-        "scripting"
+        "scripting",
+        "tabs"
     ],
+    "host_permissions": [
+        "https://generativelanguage.googleapis.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
     "content_scripts": [
         {
+            "matches": [
+                "<all_urls>"
+            ],
             "js": [
                 "content.js"
             ]

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FormFill AI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe7;
+      --panel: #fffdf8;
+      --border: #d8c7af;
+      --text: #2e241b;
+      --muted: #7a6653;
+      --accent: #9d4edd;
+      --accent-strong: #7b2cbf;
+      --success: #2d6a4f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      width: 360px;
+      padding: 16px;
+      font-family: "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, #f9dcc4 0, transparent 35%),
+        linear-gradient(180deg, #f4efe7 0%, #efe5d6 100%);
+      color: var(--text);
+    }
+
+    .panel {
+      max-height: 600px;
+      overflow-y: auto;
+      background: rgba(255, 253, 248, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 14px 32px rgba(46, 36, 27, 0.08);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 20px;
+    }
+
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .inline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+      background: var(--panel);
+    }
+
+    textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    .choice-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      min-height: 42px;
+      padding: 0 2px;
+    }
+
+    .choice-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 500;
+      font-size: 13px;
+    }
+
+    .choice-row input[type="radio"],
+    .choice-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      padding: 0;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background-color 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .secondary {
+      background: #eadfce;
+      color: var(--text);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .status {
+      min-height: 20px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .status.error {
+      color: #b42318;
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>이력서 정보</h1>
+    <p>이미지에 보인 기본정보 항목들을 저장해두고 현재 탭 지원서에 자동 입력합니다.</p>
+
+    <form id="resumeForm">
+      <div class="field">
+        <label for="name">이름</label>
+        <input id="name" name="name" type="text" placeholder="홍길동">
+      </div>
+
+      <div class="inline-grid">
+        <div class="field">
+          <label for="birthDate">생년월일</label>
+          <input id="birthDate" name="birthDate" type="date">
+        </div>
+
+        <div class="field">
+          <label>성별</label>
+          <div class="choice-row">
+            <label for="genderMale">
+              <input id="genderMale" name="gender" type="radio" value="남">
+              남
+            </label>
+            <label for="genderFemale">
+              <input id="genderFemale" name="gender" type="radio" value="여">
+              여
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="email">이메일</label>
+        <input id="email" name="email" type="email" placeholder="resume@example.com">
+      </div>
+
+      <div class="field">
+        <label for="phone">핸드폰번호</label>
+        <input id="phone" name="phone" type="tel" placeholder="010-1234-5678">
+      </div>
+
+      <div class="field">
+        <label for="hanjaName">한문이름</label>
+        <input id="hanjaName" name="hanjaName" type="text" placeholder="洪吉童">
+      </div>
+
+      <div class="field">
+        <label for="englishName">영문이름</label>
+        <input id="englishName" name="englishName" type="text" placeholder="HONG GILDONG">
+      </div>
+
+      <div class="inline-grid">
+        <div class="field">
+          <label for="emergencyContact">긴급연락처</label>
+          <input id="emergencyContact" name="emergencyContact" type="tel" placeholder="010-9876-5432">
+        </div>
+
+        <div class="field">
+          <label for="emergencyRelation">관계</label>
+          <input id="emergencyRelation" name="emergencyRelation" type="text" placeholder="부모, 배우자 등">
+        </div>
+      </div>
+
+      <div class="inline-grid">
+        <div class="field">
+          <label for="experienceLevel">신입/경력</label>
+          <select id="experienceLevel" name="experienceLevel">
+            <option value="">선택하세요</option>
+            <option value="신입">신입</option>
+            <option value="경력">경력</option>
+            <option value="신입/경력">신입/경력</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="department">부문</label>
+          <input id="department" name="department" type="text" placeholder="예: 개발, 기획, 디자인">
+        </div>
+      </div>
+
+      <div class="inline-grid">
+        <div class="field">
+          <label for="desiredSalary">희망연봉</label>
+          <input id="desiredSalary" name="desiredSalary" type="text" placeholder="예: 4500">
+        </div>
+
+        <div class="field">
+          <label>회사 내규</label>
+          <div class="choice-row">
+            <label for="desiredSalaryNegotiable">
+              <input id="desiredSalaryNegotiable" name="desiredSalaryNegotiable" type="checkbox">
+              회사 내규에 따름
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="inline-grid">
+        <div class="field">
+          <label for="currentSalary">직전연봉</label>
+          <input id="currentSalary" name="currentSalary" type="text" placeholder="예: 4000">
+        </div>
+
+        <div class="field">
+          <label for="availableDate">입사가능일자</label>
+          <input id="availableDate" name="availableDate" type="date">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="education">학력</label>
+        <textarea id="education" name="education" placeholder="OO대학교 컴퓨터공학과"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="experience">경력</label>
+        <textarea id="experience" name="experience" placeholder="프론트엔드 개발 3년"></textarea>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="secondary" id="saveBtn">저장</button>
+        <button type="button" class="primary" id="fillBtn">현재 페이지 입력</button>
+      </div>
+    </form>
+
+    <div id="status" class="status" aria-live="polite"></div>
+  </main>
+
+  <script type="module" src="/popup.js"></script>
+</body>
+</html>
