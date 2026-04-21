@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FormFill AI Side Panel</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1ec;
+      --card: rgba(255, 255, 255, 0.96);
+      --card-soft: #f6f0ff;
+      --border: #e7ddf4;
+      --text: #201a26;
+      --muted: #7b7384;
+      --accent: #6d28d9;
+      --accent-strong: #5b21b6;
+      --accent-soft: #f2eaff;
+      --secondary: #efe8f6;
+      --success: #166534;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 360px;
+      background:
+        radial-gradient(circle at top left, rgba(109, 40, 217, 0.12), transparent 30%),
+        linear-gradient(180deg, var(--bg) 0%, #f9f7f3 100%);
+      color: var(--text);
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 18px 16px 24px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 16px;
+      box-shadow: 0 18px 40px rgba(68, 40, 112, 0.06);
+    }
+
+    .card h2 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .card p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    form {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .section-group {
+      display: grid;
+      gap: 12px;
+    }
+
+    .accordion {
+      border: 1px solid #ece3f7;
+      border-radius: 20px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .accordion + .accordion {
+      margin-top: 2px;
+    }
+
+    .accordion-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border: 0;
+      border-radius: 0;
+      background: #fff;
+      color: var(--text);
+      box-shadow: none;
+    }
+
+    .accordion-header:hover {
+      transform: none;
+      box-shadow: none;
+      background: #fcfaff;
+    }
+
+    .accordion-header:active {
+      transform: none;
+    }
+
+    .accordion-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+
+    .accordion-index {
+      color: var(--accent);
+    }
+
+    .accordion-caret {
+      width: 12px;
+      height: 12px;
+      border-right: 2px solid var(--accent);
+      border-bottom: 2px solid var(--accent);
+      transform: rotate(45deg);
+      transition: transform 160ms ease;
+      flex: 0 0 auto;
+      margin-right: 4px;
+    }
+
+    .accordion.open .accordion-caret {
+      transform: rotate(225deg);
+      margin-top: 6px;
+    }
+
+    .accordion-body {
+      display: none;
+      padding: 0 18px 18px;
+      background: linear-gradient(180deg, #fffdf6 0%, #ffffff 100%);
+      border-top: 1px solid #f0e8fa;
+    }
+
+    .accordion.open .accordion-body {
+      display: block;
+    }
+
+    .subcard {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 18px;
+      background: #fffdf5;
+      border: 1px solid #f5ead0;
+    }
+
+    .subcard + .subcard {
+      margin-top: 12px;
+    }
+
+    .subcard-title {
+      margin: 0;
+      color: #d97706;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .inline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #3f3650;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid #ddd1ee;
+      border-radius: 14px;
+      padding: 11px 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .choice-row {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      flex-wrap: wrap;
+      min-height: 44px;
+      padding: 0 2px;
+    }
+
+    .choice-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .choice-row input[type="radio"],
+    .choice-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      padding: 0;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 16px;
+      padding: 13px 15px;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(46, 21, 92, 0.08);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .secondary {
+      background: var(--secondary);
+      color: var(--text);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .primary:hover {
+      background: var(--accent-strong);
+    }
+
+    .status {
+      min-height: 18px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .status.success {
+      color: var(--success);
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    @media (max-width: 420px) {
+      .inline-grid,
+      .actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="stack">
+      <section class="card">
+        <h2>내 이력 정보</h2>
+        <p>여기에 입력한 내용은 저장되어 이후 자동 입력에 재사용됩니다.</p>
+
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <form id="resumeForm">
+          <div class="field">
+            <label for="geminiApiKey">Gemini API Key</label>
+            <input
+              id="geminiApiKey"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="AIza..."
+            >
+          </div>
+
+          <div class="actions">
+            <button type="button" class="secondary" id="loadTestDataBtn">테스트값 적용</button>
+            <button type="button" class="secondary" id="clearBtn">비우기</button>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="secondary" id="saveBtn">저장</button>
+            <button type="button" class="primary" id="fillBottomBtn">현재 페이지에 자동 입력</button>
+          </div>
+
+          <div class="section-group">
+            <section class="accordion" data-accordion>
+              <button type="button" class="accordion-header" data-accordion-trigger aria-expanded="false">
+                <span class="accordion-title">
+                  <span class="accordion-index">(1)</span>
+                  기본정보
+                </span>
+                <span class="accordion-caret" aria-hidden="true"></span>
+              </button>
+              <div class="accordion-body">
+                <div class="field">
+                  <label for="name">이름</label>
+                  <input id="name" name="name" type="text" placeholder="홍길동">
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="englishName">영문이름</label>
+                    <input id="englishName" name="englishName" type="text" placeholder="HONG GILDONG">
+                  </div>
+
+                  <div class="field">
+                    <label for="hanjaName">한자이름</label>
+                    <input id="hanjaName" name="hanjaName" type="text" placeholder="洪吉童">
+                  </div>
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="birthDate">생년월일</label>
+                    <input id="birthDate" name="birthDate" type="date">
+                  </div>
+
+                  <div class="field">
+                    <label>성별</label>
+                    <div class="choice-row">
+                      <label for="genderMale">
+                        <input id="genderMale" name="gender" type="radio" value="남">
+                        남
+                      </label>
+                      <label for="genderFemale">
+                        <input id="genderFemale" name="gender" type="radio" value="여">
+                        여
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="nationality">국적</label>
+                  <input id="nationality" name="nationality" type="text" placeholder="대한민국">
+                </div>
+
+                <div class="field">
+                  <label for="email">이메일</label>
+                  <input id="email" name="email" type="email" placeholder="resume@example.com">
+                </div>
+
+                <div class="field">
+                  <label for="phone">전화번호</label>
+                  <input id="phone" name="phone" type="tel" placeholder="010-1234-5678">
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="zipCode">우편번호</label>
+                    <input id="zipCode" name="zipCode" type="text" placeholder="12345">
+                  </div>
+
+                  <div class="field">
+                    <label for="address">주소</label>
+                    <input id="address" name="address" type="text" placeholder="서울특별시 강남구">
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="addressDetail">상세주소</label>
+                  <input id="addressDetail" name="addressDetail" type="text" placeholder="101동 1203호">
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="emergencyContact">긴급연락처</label>
+                    <input id="emergencyContact" name="emergencyContact" type="tel" placeholder="010-9876-5432">
+                  </div>
+
+                  <div class="field">
+                    <label for="emergencyRelation">관계</label>
+                    <input id="emergencyRelation" name="emergencyRelation" type="text" placeholder="부모, 배우자 등">
+                  </div>
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="experienceLevel">신입/경력</label>
+                    <select id="experienceLevel" name="experienceLevel">
+                      <option value="">선택하세요</option>
+                      <option value="신입">신입</option>
+                      <option value="경력">경력</option>
+                      <option value="신입/경력">신입/경력</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="department">부문</label>
+                    <input id="department" name="department" type="text" placeholder="예: 개발, 기획, 디자인">
+                  </div>
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="desiredSalary">희망연봉</label>
+                    <input id="desiredSalary" name="desiredSalary" type="text" placeholder="예: 4500">
+                  </div>
+
+                  <div class="field">
+                    <label>회사 내규</label>
+                    <div class="choice-row">
+                      <label for="desiredSalaryNegotiable">
+                        <input id="desiredSalaryNegotiable" name="desiredSalaryNegotiable" type="checkbox">
+                        회사 내규에 따름
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="inline-grid">
+                  <div class="field">
+                    <label for="currentSalary">직전연봉</label>
+                    <input id="currentSalary" name="currentSalary" type="text" placeholder="예: 4000">
+                  </div>
+
+                  <div class="field">
+                    <label for="availableDate">입사가능일자</label>
+                    <input id="availableDate" name="availableDate" type="date">
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="accordion" data-accordion>
+              <button type="button" class="accordion-header" data-accordion-trigger aria-expanded="false">
+                <span class="accordion-title">
+                  <span class="accordion-index">(2)</span>
+                  병역사항
+                </span>
+                <span class="accordion-caret" aria-hidden="true"></span>
+              </button>
+              <div class="accordion-body">
+                <div class="field">
+                  <label>병역사항</label>
+                </div>
+            
+            <div class="inline-grid">
+              <div class="field">
+                <label for="militaryStatus">병역구분</label>
+                <select id="militaryStatus" name="militaryStatus">
+                  <option value="">선택하세요</option>
+                  <option value="비대상">비대상</option>
+                  <option value="군필">군필</option>
+                  <option value="미필">미필</option>
+                  <option value="면제">면제</option>
+                  <option value="복무중">복무중</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="militaryRank">계급</label>
+                <select id="militaryRank" name="militaryRank">
+                  <option value="">선택하세요</option>
+                  <option value="이병">이병</option>
+                  <option value="일병">일병</option>
+                  <option value="상병">상병</option>
+                  <option value="병장">병장</option>
+                  <option value="하사">하사</option>
+                  <option value="중사">중사</option>
+                  <option value="상사">상사</option>
+                  <option value="원사">원사</option>
+                  <option value="준위">준위</option>
+                  <option value="소위">소위</option>
+                  <option value="중위">중위</option>
+                  <option value="대위">대위</option>
+                  <option value="소령">소령</option>
+                  <option value="중령">중령</option>
+                  <option value="대령">대령</option>
+                  <option value="준장">준장</option>
+                  <option value="소장">소장</option>
+                  <option value="중장">중장</option>
+                  <option value="대장">대장</option>
+                  <option value="원수">원수</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="militaryStartDate">복무 시작일</label>
+                <input id="militaryStartDate" name="militaryStartDate" type="date">
+              </div>
+
+              <div class="field">
+                <label for="militaryEndDate">복무 종료일</label>
+                <input id="militaryEndDate" name="militaryEndDate" type="date">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="dischargeType">제대구분</label>
+              <select id="dischargeType" name="dischargeType">
+                <option value="">선택하세요</option>
+                <option value="만기제대">만기제대</option>
+                <option value="소집해제">소집해제</option>
+                <option value="의가사제대">의가사제대</option>
+                <option value="의병제대">의병제대</option>
+                <option value="불명예제대">불명예제대</option>
+                <option value="상이제대">상이제대</option>
+              </select>
+            </div>
+              </div>
+            </section>
+
+            <section class="accordion" data-accordion>
+              <button type="button" class="accordion-header" data-accordion-trigger aria-expanded="false">
+                <span class="accordion-title">
+                  <span class="accordion-index">(3)</span>
+                  학력사항
+                </span>
+                <span class="accordion-caret" aria-hidden="true"></span>
+              </button>
+              <div class="accordion-body">
+                <section class="subcard">
+                  <h3 class="subcard-title">고등학교</h3>
+                  <div class="inline-grid">
+              <div class="field">
+                <label for="highSchoolStartDate">입학일자</label>
+                <input id="highSchoolStartDate" name="highSchoolStartDate" type="date">
+              </div>
+
+              <div class="field">
+                <label for="highSchoolEndDate">졸업일자</label>
+                <input id="highSchoolEndDate" name="highSchoolEndDate" type="date">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="highSchoolName">학교명</label>
+                <input id="highSchoolName" name="highSchoolName" type="text" placeholder="OO고등학교">
+              </div>
+
+              <div class="field">
+                <label for="highSchoolLocation">학교소재지</label>
+                <select id="highSchoolLocation" name="highSchoolLocation">
+                  <option value="">선택하세요</option>
+                  <option value="서울">서울</option>
+                  <option value="부산">부산</option>
+                  <option value="대구">대구</option>
+                  <option value="인천">인천</option>
+                  <option value="광주">광주</option>
+                  <option value="대전">대전</option>
+                  <option value="울산">울산</option>
+                  <option value="경기">경기</option>
+                  <option value="강원">강원</option>
+                  <option value="충북">충북</option>
+                  <option value="충남">충남</option>
+                  <option value="전북">전북</option>
+                  <option value="전남">전남</option>
+                  <option value="경북">경북</option>
+                  <option value="경남">경남</option>
+                  <option value="제주">제주</option>
+                  <option value="세종">세종</option>
+                  <option value="미국">미국</option>
+                  <option value="일본">일본</option>
+                  <option value="프랑스">프랑스</option>
+                  <option value="호주">호주</option>
+                  <option value="중국">중국</option>
+                  <option value="영국">영국</option>
+                  <option value="독일">독일</option>
+                  <option value="캐나다">캐나다</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="highSchoolGraduationStatus">졸업구분</label>
+                <select id="highSchoolGraduationStatus" name="highSchoolGraduationStatus">
+                  <option value="">선택하세요</option>
+                  <option value="졸업">졸업</option>
+                  <option value="졸업예정">졸업예정</option>
+                  <option value="수료">수료</option>
+                  <option value="중퇴">중퇴</option>
+                  <option value="휴학">휴학</option>
+                  <option value="재학">재학</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="highSchoolTrack">계열</label>
+                <select id="highSchoolTrack" name="highSchoolTrack">
+                  <option value="">선택하세요</option>
+                  <option value="인문">인문</option>
+                  <option value="상업">상업</option>
+                  <option value="공업">공업</option>
+                  <option value="전산정보">전산정보</option>
+                  <option value="예술">예술</option>
+                  <option value="농업">농업</option>
+                  <option value="과학">과학</option>
+                  <option value="외국어">외국어</option>
+                  <option value="체육">체육</option>
+                  <option value="마이스터">마이스터</option>
+                  <option value="특성화">특성화</option>
+                  <option value="자율형 사립">자율형 사립</option>
+                  <option value="자율형 공립">자율형 공립</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
+                  </div>
+                </section>
+
+                <section class="subcard">
+                  <h3 class="subcard-title">대학교</h3>
+                  <div class="inline-grid">
+              <div class="field">
+                <label for="collegeStartDate">입학일자</label>
+                <input id="collegeStartDate" name="collegeStartDate" type="date">
+              </div>
+
+              <div class="field">
+                <label for="collegeEndDate">졸업일자</label>
+                <input id="collegeEndDate" name="collegeEndDate" type="date">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="collegeName">학교명</label>
+                <input id="collegeName" name="collegeName" type="text" placeholder="OO대학교">
+              </div>
+
+              <div class="field">
+                <label for="collegeLocation">학교소재지</label>
+                <select id="collegeLocation" name="collegeLocation">
+                  <option value="">선택하세요</option>
+                  <option value="서울">서울</option>
+                  <option value="부산">부산</option>
+                  <option value="대구">대구</option>
+                  <option value="인천">인천</option>
+                  <option value="광주">광주</option>
+                  <option value="대전">대전</option>
+                  <option value="울산">울산</option>
+                  <option value="경기">경기</option>
+                  <option value="강원">강원</option>
+                  <option value="충북">충북</option>
+                  <option value="충남">충남</option>
+                  <option value="전북">전북</option>
+                  <option value="전남">전남</option>
+                  <option value="경북">경북</option>
+                  <option value="경남">경남</option>
+                  <option value="제주">제주</option>
+                  <option value="세종">세종</option>
+                  <option value="미국">미국</option>
+                  <option value="일본">일본</option>
+                  <option value="프랑스">프랑스</option>
+                  <option value="호주">호주</option>
+                  <option value="중국">중국</option>
+                  <option value="영국">영국</option>
+                  <option value="독일">독일</option>
+                  <option value="캐나다">캐나다</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="collegeGraduationStatus">졸업구분</label>
+                <select id="collegeGraduationStatus" name="collegeGraduationStatus">
+                  <option value="">선택하세요</option>
+                  <option value="졸업">졸업</option>
+                  <option value="졸업예정">졸업예정</option>
+                  <option value="수료">수료</option>
+                  <option value="중퇴">중퇴</option>
+                  <option value="휴학">휴학</option>
+                  <option value="재학">재학</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="collegeCampusType">본교/분교</label>
+                <select id="collegeCampusType" name="collegeCampusType">
+                  <option value="">선택하세요</option>
+                  <option value="본교">본교</option>
+                  <option value="분교">분교</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="majorName">전공명</label>
+                <input id="majorName" name="majorName" type="text" placeholder="컴퓨터공학">
+              </div>
+
+              <div class="field">
+                <label for="minorName">부전공명</label>
+                <input id="minorName" name="minorName" type="text" placeholder="경영학">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="gpa">학점(평점)</label>
+                <input id="gpa" name="gpa" type="text" placeholder="3.85">
+              </div>
+
+              <div class="field">
+                <label for="gpaScale">학점(만점)</label>
+                <input id="gpaScale" name="gpaScale" type="text" placeholder="4.5">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="degreeType">학위구분</label>
+                <select id="degreeType" name="degreeType">
+                  <option value="">선택하세요</option>
+                  <option value="학사">학사</option>
+                  <option value="전문학사">전문학사</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="attendanceType">주간/야간</label>
+                <select id="attendanceType" name="attendanceType">
+                  <option value="">선택하세요</option>
+                  <option value="주간">주간</option>
+                  <option value="야간">야간</option>
+                </select>
+              </div>
+                  </div>
+                </section>
+              </div>
+            </section>
+
+            <section class="accordion" data-accordion>
+              <button type="button" class="accordion-header" data-accordion-trigger aria-expanded="false">
+                <span class="accordion-title">
+                  <span class="accordion-index">(4)</span>
+                  자격증
+                </span>
+                <span class="accordion-caret" aria-hidden="true"></span>
+              </button>
+              <div class="accordion-body">
+                <div class="inline-grid">
+              <div class="field">
+                <label for="certificateName">자격증명</label>
+                <input id="certificateName" name="certificateName" type="text" placeholder="정보처리기사">
+              </div>
+
+              <div class="field">
+                <label for="certificateIssuer">발급기관</label>
+                <input id="certificateIssuer" name="certificateIssuer" type="text" placeholder="한국산업인력공단">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="certificateDate">취득일</label>
+                <input id="certificateDate" name="certificateDate" type="date">
+              </div>
+
+              <div class="field">
+                <label for="certificateNumber">등록번호</label>
+                <input id="certificateNumber" name="certificateNumber" type="text" placeholder="1234-567890">
+              </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="accordion" data-accordion>
+              <button type="button" class="accordion-header" data-accordion-trigger aria-expanded="false">
+                <span class="accordion-title">
+                  <span class="accordion-index">(5)</span>
+                  경력사항
+                </span>
+                <span class="accordion-caret" aria-hidden="true"></span>
+              </button>
+              <div class="accordion-body">
+                <div class="inline-grid">
+              <div class="field">
+                <label for="employmentType">고용형태</label>
+                <select id="employmentType" name="employmentType">
+                  <option value="">선택하세요</option>
+                  <option value="정규직">정규직</option>
+                  <option value="계약직">계약직</option>
+                  <option value="파견직">파견직</option>
+                  <option value="프리랜서">프리랜서</option>
+                  <option value="개인사업">개인사업</option>
+                  <option value="병역특례">병역특례</option>
+                  <option value="인턴">인턴</option>
+                  <option value="아르바이트">아르바이트</option>
+                  <option value="기타">기타</option>
+                  <option value="기술훈련생">기술훈련생</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="companyName">회사명</label>
+                <input id="companyName" name="companyName" type="text" placeholder="주식회사 예시">
+              </div>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="careerStartDate">입사일</label>
+                <input id="careerStartDate" name="careerStartDate" type="date">
+              </div>
+
+              <div class="field">
+                <label for="careerEndDate">퇴사일</label>
+                <input id="careerEndDate" name="careerEndDate" type="date">
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="choice-row" for="isCurrentEmployment">
+                <input id="isCurrentEmployment" name="isCurrentEmployment" type="checkbox">
+                재직중
+              </label>
+            </div>
+
+            <div class="inline-grid">
+              <div class="field">
+                <label for="jobTitle">직급</label>
+                <input id="jobTitle" name="jobTitle" type="text" placeholder="대리">
+              </div>
+
+              <div class="field">
+                <label for="departmentName">부서</label>
+                <input id="departmentName" name="departmentName" type="text" placeholder="개발팀">
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="retirementReason">퇴직사유</label>
+              <input id="retirementReason" name="retirementReason" type="text" placeholder="커리어 전환">
+            </div>
+
+            <div class="field">
+              <label for="jobDescription">담당업무</label>
+              <textarea id="jobDescription" name="jobDescription" placeholder="서비스 개발, 운영, 배포 자동화"></textarea>
+            </div>
+              </div>
+            </section>
+          </div>
+
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="/sidepanel.js"></script>
+</body>
+</html>

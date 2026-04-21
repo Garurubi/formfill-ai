@@ -2,3 +2,6 @@ check.md
 node_modules/
 dist/
 prompt_test/
+.env
+package-lock.json
+package.json

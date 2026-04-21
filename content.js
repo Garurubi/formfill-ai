@@ -1,10 +1,15 @@
 const GEMINI_MODEL = "gemini-3-flash-preview";
 const SCREENSHOT_DELAY_MS = 350;
+const MAX_DYNAMIC_STEPS = 6;
 
 class FormAnalyzer {
   constructor() {
     this.inputs = [];
     this.inputMap = new Map();
+    this.dynamicInputs = [];
+    this.dynamicInputMap = new Map();
+    this.dynamicActions = [];
+    this.dynamicActionMap = new Map();
   }
 
   analyzeInputs() {
@@ -354,6 +359,7 @@ ${JSON.stringify(serializedInputs, null, 2)}
 
   async fillForm(resumeData) {
     const plan = await this.generatePlan(resumeData);
+    console.log("FormFill AI: generatePlan 결과", plan);
     this.analyzeInputs();
 
     const applied = [];
@@ -387,6 +393,123 @@ ${JSON.stringify(serializedInputs, null, 2)}
     };
   }
 
+  async fillDynamicForm(resumeData) {
+    console.log("FormFill AI: 동적 폼 자동 입력 시작");
+    const history = [];
+    const triggeredActionKeys = new Set();
+    let lastChange = null;
+    let lastDecision = null;
+
+    for (let step = 0; step < MAX_DYNAMIC_STEPS; step += 1) {
+      const inputs = this.collectDynamicInputs();
+      const actions = this.collectDynamicActions(triggeredActionKeys);
+      const screenshots = await this.capturePageScreenshots();
+      const decision = await this.requestDynamicDecision({
+        resumeData,
+        inputs,
+        actions,
+        lastChange,
+        lastDecision,
+        history,
+        step,
+      }, screenshots);
+
+      lastDecision = decision;
+
+      if (!decision || decision.nextStep === "done") {
+        return {
+          summary: decision?.summary || "동적 입력이 완료되었습니다.",
+          history,
+          lastChange,
+          decision,
+        };
+      }
+
+      if (decision.nextStep === "trigger") {
+        const actionKey = decision.trigger?.actionKey;
+        const actionData = actionKey ? this.dynamicActionMap.get(actionKey) : null;
+
+        if (!actionData) {
+          history.push({
+            step: step + 1,
+            kind: "trigger",
+            status: "skipped",
+            reason: "모델이 지정한 동적 요소를 찾지 못했습니다.",
+            requestedActionKey: actionKey || "",
+          });
+          continue;
+        }
+
+        const change = await this.executeDynamicAction(actionData, decision.trigger || {});
+        triggeredActionKeys.add(actionData.actionKey);
+        lastChange = change;
+        history.push({
+          step: step + 1,
+          kind: "trigger",
+          status: change.changed ? "applied" : "noop",
+          actionKey: actionData.actionKey,
+          label: actionData.label,
+          actionType: actionData.actionType,
+          reason: decision.trigger?.reason || "",
+          change,
+        });
+        continue;
+      }
+
+      if (decision.nextStep === "fill") {
+        const applied = [];
+
+        for (const field of decision.fillTargets || []) {
+          const inputData = field?.inputKey ? this.dynamicInputMap.get(field.inputKey) : null;
+          if (!inputData) {
+            continue;
+          }
+
+          const resolvedValue = this.resolvePlanValue(field, resumeData);
+          const didApply = await this.applyPlannedValue(inputData.element, resolvedValue, field);
+
+          if (didApply) {
+            applied.push({
+              inputKey: inputData.inputKey,
+              fieldLabel: field.fieldLabel || inputData.label || inputData.name || inputData.id,
+              value: resolvedValue,
+            });
+          }
+        }
+
+        history.push({
+          step: step + 1,
+          kind: "fill",
+          status: applied.length ? "applied" : "noop",
+          applied,
+        });
+
+        if (!decision.continueAfterFill) {
+          return {
+            summary: decision.summary || "동적 입력이 완료되었습니다.",
+            history,
+            lastChange,
+            decision,
+          };
+        }
+
+        lastChange = {
+          changed: applied.length > 0,
+          reason: "입력값 적용 후 재탐색",
+          newInputKeys: applied.map((item) => item.inputKey),
+          summary: `${applied.length}개 필드에 값을 입력했습니다.`,
+        };
+      }
+    }
+
+    return {
+      summary: "최대 동적 탐색 횟수에 도달했습니다.",
+      history,
+      lastChange,
+      lastDecision,
+    };
+  }
+
   /**
    * LLM이 생성한 값을 우선하고, 값이 없으면 resumeData에서 가져옴.
    * @param {Object} field 
@@ -404,6 +527,433 @@ ${JSON.stringify(serializedInputs, null, 2)}
     }
 
     return "";
+  }
+
+  collectDynamicInputs() {
+    this.dynamicInputs = [];
+    this.dynamicInputMap.clear();
+
+    const elements = Array.from(document.querySelectorAll("input, select, textarea"));
+    let index = 0;
+
+    elements.forEach((element) => {
+      if (!this.isFillableElement(element) || !this.isVisibleElement(element)) {
+        return;
+      }
+
+      const inputKey = this.buildDynamicKey("input", element, index);
+      const inputData = {
+        inputKey,
+        element,
+        tagName: element.tagName.toLowerCase(),
+        type: (element.type || "").toLowerCase(),
+        id: element.id || "",
+        name: element.name || "",
+        label: this.findLabelFor(element),
+        placeholder: element.placeholder || "",
+        ariaLabel: element.getAttribute("aria-label") || "",
+        selector: this.buildSelector(element),
+        sectionText: this.getSectionText(element),
+        optionTexts: this.getOptionTexts(element),
+        currentValue: this.getCurrentElementValue(element),
+      };
+
+      this.dynamicInputs.push(inputData);
+      this.dynamicInputMap.set(inputKey, inputData);
+      index += 1;
+    });
+
+    return this.dynamicInputs.map((input) => ({
+      inputKey: input.inputKey,
+      tagName: input.tagName,
+      type: input.type,
+      id: input.id,
+      name: input.name,
+      label: input.label,
+      placeholder: input.placeholder,
+      ariaLabel: input.ariaLabel,
+      selector: input.selector,
+      sectionText: input.sectionText,
+      optionTexts: input.optionTexts,
+      currentValue: input.currentValue,
+    }));
+  }
+
+  collectDynamicActions(triggeredActionKeys = new Set()) {
+    this.dynamicActions = [];
+    this.dynamicActionMap.clear();
+
+    const selector = [
+      "button",
+      "[role='button']",
+      "[role='tab']",
+      "[role='option']",
+      "summary",
+      "a[href]",
+      "label",
+      "input[type='radio']",
+      "input[type='checkbox']",
+      "select",
+    ].join(", ");
+    const elements = Array.from(document.querySelectorAll(selector));
+    let index = 0;
+
+    elements.forEach((element) => {
+      if (!this.isActionableElement(element)) {
+        return;
+      }
+
+      const actionKey = this.buildDynamicKey("action", element, index);
+      if (triggeredActionKeys.has(actionKey)) {
+        index += 1;
+        return;
+      }
+
+      const actionData = {
+        actionKey,
+        element,
+        tagName: element.tagName.toLowerCase(),
+        type: (element.type || "").toLowerCase(),
+        id: element.id || "",
+        name: element.name || "",
+        role: element.getAttribute("role") || "",
+        selector: this.buildSelector(element),
+        label: this.getElementTextSummary(element),
+        sectionText: this.getSectionText(element),
+        actionType: this.inferActionType(element),
+        value: this.getCurrentElementValue(element),
+        optionTexts: element.tagName === "SELECT" ? this.getOptionTexts(element) : [],
+      };
+
+      this.dynamicActions.push(actionData);
+      this.dynamicActionMap.set(actionKey, actionData);
+      index += 1;
+    });
+
+    return this.dynamicActions.map((action) => ({
+      actionKey: action.actionKey,
+      tagName: action.tagName,
+      type: action.type,
+      id: action.id,
+      name: action.name,
+      role: action.role,
+      selector: action.selector,
+      label: action.label,
+      sectionText: action.sectionText,
+      actionType: action.actionType,
+      value: action.value,
+      optionTexts: action.optionTexts,
+    }));
+  }
+
+  buildDynamicKey(prefix, element, index) {
+    const seed = [
+      this.buildSelector(element),
+      element.id,
+      element.name,
+      element.getAttribute("role"),
+      element.getAttribute("aria-label"),
+      this.getElementTextSummary(element),
+      element.tagName.toLowerCase(),
+      element.type,
+    ]
+      .filter(Boolean)
+      .join("_");
+    const sanitized = String(seed || `${prefix}_${index}`)
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .slice(0, 80);
+    return `${prefix}_${sanitized || String(index).padStart(3, "0")}`;
+  }
+
+  getCurrentElementValue(element) {
+    if (!element) {
+      return "";
+    }
+
+    if (element.tagName === "SELECT") {
+      const selectedOption = element.options?.[element.selectedIndex];
+      return selectedOption?.textContent?.trim() || element.value || "";
+    }
+
+    if ((element.type || "").toLowerCase() === "checkbox" || (element.type || "").toLowerCase() === "radio") {
+      return element.checked ? (element.value || true) : "";
+    }
+
+    return element.value || "";
+  }
+
+  getElementTextSummary(element) {
+    if (!element) {
+      return "";
+    }
+
+    const candidates = [
+      element.innerText,
+      element.textContent,
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.value,
+      this.findLabelFor(element),
+    ]
+      .map((text) => String(text || "").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+    return (candidates[0] || "").slice(0, 120);
+  }
+
+  inferActionType(element) {
+    const tagName = element.tagName.toLowerCase();
+    const type = (element.type || "").toLowerCase();
+
+    if (tagName === "select") {
+      return "select";
+    }
+
+    if (type === "checkbox") {
+      return "check";
+    }
+
+    if (type === "radio") {
+      return "radio";
+    }
+
+    return "click";
+  }
+
+  isVisibleElement(element) {
+    if (!element || !element.isConnected) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+  }
+
+  isActionableElement(element) {
+    if (!element || !this.isVisibleElement(element) || element.disabled) {
+      return false;
+    }
+
+    if (this.isFillableElement(element)) {
+      const type = (element.type || "").toLowerCase();
+      return type === "radio" || type === "checkbox" || element.tagName === "SELECT";
+    }
+
+    const tagName = element.tagName.toLowerCase();
+    const role = element.getAttribute("role");
+    return tagName === "button" || tagName === "summary" || tagName === "a" || tagName === "label" || role === "button" || role === "tab" || role === "option";
+  }
+
+  async requestDynamicDecision(context, screenshots) {
+    const prompt = this.buildDynamicPrompt(context, screenshots);
+    const response = await this.sendRuntimeMessage({
+      action: "generateGeminiPlan",
+      payload: {
+        model: GEMINI_MODEL,
+        prompt,
+        screenshots,
+      },
+    });
+
+    if (!response?.success || !response.plan) {
+      throw new Error(response?.message || "동적 폼 판단에 실패했습니다.");
+    }
+
+    return response.plan;
+  }
+
+  buildDynamicPrompt(context, screenshots) {
+    const imageNames = screenshots.map((screenshot) => screenshot.fileName);
+    const compactResumeData = Object.fromEntries(
+      Object.entries(context.resumeData || {}).filter(([, value]) => {
+        if (typeof value === "boolean") {
+          return value;
+        }
+
+        return String(value || "").trim() !== "";
+      }),
+    );
+
+    return `
+당신은 동적 채용 지원서의 입력 순서를 판단하는 도우미입니다.
+
+목표:
+1. 현재 화면에서 먼저 이벤트를 주어야 할 요소가 있는지 찾습니다.
+2. 이벤트 수행 후 생긴 변화 요약을 보고 다시 이벤트가 필요한지, 값을 입력해야 하는지 판단합니다.
+3. 값을 입력해야 한다면 변화가 일어난 영역을 우선 참고해 실제 입력할 태그를 지정합니다.
+4. 반환은 순수 JSON만 합니다. 코드블록은 금지합니다.
+
+현재 단계: ${context.step + 1}
+
+스크린샷 파일 목록:
+${imageNames.map((name, index) => `${index + 1}. ${name}`).join("\n")}
+
+resumeData:
+${JSON.stringify(compactResumeData, null, 2)}
+
+현재 입력 가능한 태그 목록:
+${JSON.stringify(context.inputs || [], null, 2)}
+
+현재 먼저 이벤트를 줄 수 있는 후보 목록:
+${JSON.stringify(context.actions || [], null, 2)}
+
+직전 변화 요약:
+${JSON.stringify(context.lastChange || null, null, 2)}
+
+지금까지 수행 이력:
+${JSON.stringify(context.history || [], null, 2)}
+
+반환 형식:
+{
+  "summary": "현재 상태 요약",
+  "nextStep": "trigger | fill | done",
+  "trigger": {
+    "actionKey": "actions 목록에 있는 actionKey",
+    "value": "select일 때 선택할 값, 아니면 빈 문자열 가능",
+    "reason": "왜 먼저 이 이벤트가 필요한지"
+  },
+  "fillTargets": [
+    {
+      "inputKey": "inputs 목록에 있는 inputKey",
+      "fieldLabel": "화면 항목명",
+      "resumeKey": "resumeData의 key 또는 etc",
+      "inputType": "text | textarea | number | date | email | tel | checkbox | radio | select | unknown",
+      "action": "type | click | select | check | skip",
+      "value": "실제로 넣을 값",
+      "why": "왜 이 태그에 이 값을 넣는지"
+    }
+  ],
+  "continueAfterFill": true
+}
+
+판단 규칙:
+- 숨겨진 필드를 억지로 채우지 마세요.
+- 탭, 아코디언, 라디오, 체크박스, 셀렉트처럼 다른 필드를 드러내는 요소가 보이면 trigger를 우선 검토하세요.
+- 직전 변화 요약에 새 입력 태그가 생겼다면 그 변화 영역의 태그를 우선 fillTargets에 넣으세요.
+- 값이 불확실하면 해당 필드는 skip 처리하거나 done을 선택하세요.
+- 이미 수행한 actionKey는 반복 선택하지 마세요.
+- 모든 inputKey, actionKey는 제공된 목록 중 하나를 그대로 사용하세요.
+`.trim();
+  }
+
+  async executeDynamicAction(actionData, instruction) {
+    const element = actionData?.element;
+    if (!element) {
+      return {
+        changed: false,
+        summary: "동적 요소가 존재하지 않습니다.",
+      };
+    }
+
+    element.scrollIntoView({ block: "center", inline: "nearest" });
+    await this.wait(80);
+
+    const beforeInputs = this.collectDynamicInputs();
+    const beforeActions = this.collectDynamicActions();
+    const beforeFingerprint = this.buildPageFingerprint();
+
+    await this.performActionInstruction(element, actionData, instruction);
+    await this.wait(500);
+
+    const afterInputs = this.collectDynamicInputs();
+    const afterActions = this.collectDynamicActions();
+    const afterFingerprint = this.buildPageFingerprint();
+
+    return this.summarizeDynamicChange({
+      actionData,
+      beforeInputs,
+      afterInputs,
+      beforeActions,
+      afterActions,
+      beforeFingerprint,
+      afterFingerprint,
+    });
+  }
+
+  /**
+   * 
+   * @param {*} element 
+   * @param {*} actionData 
+   * @param {*} instruction 
+   * @returns 
+   */
+  async performActionInstruction(element, actionData, instruction) {
+    // select의 경우 값을 선택하고 mousedown 이벤트 발생
+    if (actionData.actionType === "select") {
+      const selected = this.applySelectValue(element, instruction?.value || "");
+      if (!selected && this.isClickable(element)) {
+        element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        element.focus();
+      }
+      return;
+    }
+
+    // 
+    if (actionData.actionType === "check" || actionData.actionType === "radio") {
+      if (this.isClickable(element)) {
+        element.click();
+        return;
+      }
+
+      this.setNativeChecked(element, true);
+      this.dispatchChangeEvents(element);
+      return;
+    }
+
+    if (this.isClickable(element)) {
+      element.click();
+      return;
+    }
+
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }
+
+  buildPageFingerprint() {
+    const rootText = (document.body?.innerText || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 800);
+
+    return {
+      url: window.location.href,
+      title: document.title,
+      textSample: rootText,
+      inputCount: document.querySelectorAll("input, select, textarea").length,
+      actionCount: document.querySelectorAll("button, [role='button'], [role='tab'], summary, a[href], label").length,
+    };
+  }
+
+  summarizeDynamicChange(payload) {
+    const beforeInputKeys = new Set((payload.beforeInputs || []).map((item) => item.inputKey));
+    const afterInputKeys = new Set((payload.afterInputs || []).map((item) => item.inputKey));
+    const beforeActionKeys = new Set((payload.beforeActions || []).map((item) => item.actionKey));
+    const afterActionKeys = new Set((payload.afterActions || []).map((item) => item.actionKey));
+
+    const newInputs = (payload.afterInputs || []).filter((item) => !beforeInputKeys.has(item.inputKey));
+    const removedInputs = (payload.beforeInputs || []).filter((item) => !afterInputKeys.has(item.inputKey));
+    const newActions = (payload.afterActions || []).filter((item) => !beforeActionKeys.has(item.actionKey));
+    const removedActions = (payload.beforeActions || []).filter((item) => !afterActionKeys.has(item.actionKey));
+    const fingerprintChanged =
+      JSON.stringify(payload.beforeFingerprint || {}) !== JSON.stringify(payload.afterFingerprint || {});
+
+    return {
+      changed: fingerprintChanged || newInputs.length > 0 || removedInputs.length > 0 || newActions.length > 0 || removedActions.length > 0,
+      summary: [
+        newInputs.length ? `새 입력 태그 ${newInputs.length}개` : "",
+        removedInputs.length ? `사라진 입력 태그 ${removedInputs.length}개` : "",
+        newActions.length ? `새 이벤트 후보 ${newActions.length}개` : "",
+        removedActions.length ? `사라진 이벤트 후보 ${removedActions.length}개` : "",
+      ]
+        .filter(Boolean)
+        .join(", ") || "감지된 구조 변화가 없습니다.",
+      actionKey: payload.actionData?.actionKey || "",
+      actionLabel: payload.actionData?.label || "",
+      newInputKeys: newInputs.map((item) => item.inputKey),
+      removedInputKeys: removedInputs.map((item) => item.inputKey),
+      newActionKeys: newActions.map((item) => item.actionKey),
+      removedActionKeys: removedActions.map((item) => item.actionKey),
+    };
   }
 
   /**
@@ -732,6 +1282,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (error) {
         console.error("FormFill AI: fill 실패", error);
         sendResponse({ status: "error", message: error.message || "폼 자동 입력에 실패했습니다." });
+      }
+    })();
+
+    return true;
+  }
+
+  if (request.action === "fillDynamic") {
+    (async () => {
+      try {
+        const result = await formAnalyzer.fillDynamicForm(request.data || {});
+        sendResponse({ status: "success", data: result });
+      } catch (error) {
+        console.error("FormFill AI: fillDynamic 실패", error);
+        sendResponse({ status: "error", message: error.message || "동적 폼 자동 입력에 실패했습니다." });
       }
     })();
 

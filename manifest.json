@@ -10,7 +10,8 @@
         "storage",
         "activeTab",
         "scripting",
-        "tabs"
+        "tabs",
+        "sidePanel"
     ],
     "host_permissions": [
         "https://generativelanguage.googleapis.com/*"
@@ -29,6 +30,9 @@
         }
     ],
     "action": {
-        "default_popup": "form_input.html"
+        "default_popup": "popup.html"
+    },
+    "side_panel": {
+        "default_path": "sidepanel.html"
     }
 }
