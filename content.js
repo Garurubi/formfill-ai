@@ -63,9 +63,9 @@ class FormAnalyzer {
   }
 
   /**
-   * 
+   * 부모 요소를 타고 올라가면서 children 중에 같은 태그인 요소를 찾음
    * @param {*} element 
-   * @returns 
+   * @returns String (ex. form > div:nth-of-type(2) > input)
    */
   buildSelector(element) {
     if (element.id) {
@@ -75,6 +75,7 @@ class FormAnalyzer {
     const segments = [];
     let current = element;
 
+    // 부모 요소를 타고 올라가면서 children 중에 같은 태그인 요소를 4개까지 찾음
     while (current && current.nodeType === Node.ELEMENT_NODE && segments.length < 4) {
       let segment = current.tagName.toLowerCase();
       if (current.name) {
@@ -83,10 +84,12 @@ class FormAnalyzer {
         break;
       }
 
+      // 형제 요소 중에서 같은 태그 이름을 가진 요소가 여러 개 있는 경우 :nth-of-type() 추가
       const siblings = current.parentElement
         ? Array.from(current.parentElement.children).filter((child) => child.tagName === current.tagName)
         : [];
 
+      // nth-of-type : 똑같은 태그가 2개 이상일때 몇번째 요소인지 확인하기 위함
       if (siblings.length > 1) {
         segment += `:nth-of-type(${siblings.indexOf(current) + 1})`;
       }
@@ -150,6 +153,11 @@ class FormAnalyzer {
     return "";
   }
 
+  /**
+   * element 기준으로 가장 가까운 상위 섹션의 텍스트를 반환합니다.
+   * @param {*} element 
+   * @returns 
+   */
   getSectionText(element) {
     const container =
       element.closest("fieldset, section, article, li, tr, .field, .form-group, .input-wrap, .row") ||
@@ -166,6 +174,11 @@ class FormAnalyzer {
     return text.slice(0, 240);
   }
 
+  /**
+   * select 요소의 option이나, radio/checkbox의 label 등 입력 가능한 옵션 텍스트를 반환합니다.
+   * @param {*} element 
+   * @returns 
+   */
   getOptionTexts(element) {
     if (element.tagName === "SELECT") {
       return Array.from(element.options || [])
@@ -579,6 +592,11 @@ ${JSON.stringify(serializedInputs, null, 2)}
     }));
   }
 
+  /**
+   * 
+   * @param {*} triggeredActionKeys 
+   * @returns 
+   */
   collectDynamicActions(triggeredActionKeys = new Set()) {
     this.dynamicActions = [];
     this.dynamicActionMap.clear();
@@ -604,6 +622,7 @@ ${JSON.stringify(serializedInputs, null, 2)}
       }
 
       const actionKey = this.buildDynamicKey("action", element, index);
+      // 이미 이전에 이벤트를 수행했던 태그의 경우 포함하지 않음
       if (triggeredActionKeys.has(actionKey)) {
         index += 1;
         return;
@@ -665,6 +684,11 @@ ${JSON.stringify(serializedInputs, null, 2)}
     return `${prefix}_${sanitized || String(index).padStart(3, "0")}`;
   }
 
+  /**
+   * element의 현재 값을 반환
+   * @param {*} element 
+   * @returns 
+   */
   getCurrentElementValue(element) {
     if (!element) {
       return "";
@@ -682,11 +706,17 @@ ${JSON.stringify(serializedInputs, null, 2)}
     return element.value || "";
   }
 
+  /**
+   * element에서 텍스트 후보군을 최대한 추출해서 반환
+   * @param {*} element 
+   * @returns 
+   */
   getElementTextSummary(element) {
     if (!element) {
       return "";
     }
 
+    // innerText, textContent등 값이 있는것만 추출
     const candidates = [
       element.innerText,
       element.textContent,
@@ -698,9 +728,15 @@ ${JSON.stringify(serializedInputs, null, 2)}
       .map((text) => String(text || "").replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
+    // !@#$ 후보군 텍스트 중에서 제일 첫번째값만 사용하는 한계점이 존재
     return (candidates[0] || "").slice(0, 120);
   }
 
+  /**
+   * tagName과 type을 기반으로 이 요소가 어떤 이벤트 유형일지 추론
+   * @param {*} element 
+   * @returns 
+   */
   inferActionType(element) {
     const tagName = element.tagName.toLowerCase();
     const type = (element.type || "").toLowerCase();
@@ -834,6 +870,7 @@ ${JSON.stringify(context.history || [], null, 2)}
 - 값이 불확실하면 해당 필드는 skip 처리하거나 done을 선택하세요.
 - 이미 수행한 actionKey는 반복 선택하지 마세요.
 - 모든 inputKey, actionKey는 제공된 목록 중 하나를 그대로 사용하세요.
+- 다음 페이지로 넘어가는 버튼은 선택하지 마세요.
 `.trim();
   }
 
@@ -1277,7 +1314,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "fill") {
     (async () => {
       try {
+        let start_time = Date.now();
         const result = await formAnalyzer.fillForm(request.data || {});
+        console.log("FormFill AI: fill 총 소요 시간", (Date.now() - start_time) / 1000, "초");
         sendResponse({ status: "success", data: result });
       } catch (error) {
         console.error("FormFill AI: fill 실패", error);
@@ -1291,7 +1330,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "fillDynamic") {
     (async () => {
       try {
+        let start_time = Date.now();
         const result = await formAnalyzer.fillDynamicForm(request.data || {});
+        console.log("FormFill AI: fillDynamic 총 소요 시간", (Date.now() - start_time) / 1000, "초");
         sendResponse({ status: "success", data: result });
       } catch (error) {
         console.error("FormFill AI: fillDynamic 실패", error);

@@ -52,6 +52,7 @@ async function captureVisibleTabWithThrottle(windowId) {
   }
 
   const dataUrl = await captureVisibleTab(windowId);
+
   lastCaptureAt = Date.now();
   return dataUrl;
 }
