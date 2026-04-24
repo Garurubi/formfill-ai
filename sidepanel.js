@@ -46,10 +46,20 @@ const TEST_RESUME_DATA = {
   gpaScale: "4.5",
   degreeType: "학사",
   attendanceType: "주간",
-  certificateName: "정보처리기사",
-  certificateIssuer: "한국산업인력공단",
-  certificateDate: "2020-09-11",
-  certificateNumber: "20-0-123456",
+  certificates: [
+    {
+      name: "정보처리기사",
+      issuer: "한국산업인력공단",
+      date: "2020-09-11",
+      number: "20-0-123456",
+    },
+    {
+      name: "SQLD",
+      issuer: "한국데이터산업진흥원",
+      date: "2021-04-16",
+      number: "SQLD-21-654321",
+    },
+  ],
   employmentType: "정규직",
   companyName: "폼필 AI",
   careerStartDate: "2022-01-03",
@@ -71,17 +81,161 @@ const statusElement = document.getElementById("status");
 const isCurrentEmploymentInput = document.getElementById("isCurrentEmployment");
 const careerEndDateInput = document.getElementById("careerEndDate");
 const accordionTriggers = Array.from(document.querySelectorAll("[data-accordion-trigger]"));
+const certificatesContainer = document.getElementById("certificatesContainer");
+const addCertificateButton = document.getElementById("addCertificateBtn");
 
 let lastHandledRequestedAt = 0;
+
+function createEmptyCertificate() {
+  return {
+    name: "",
+    issuer: "",
+    date: "",
+    number: "",
+  };
+}
+
+function escapeAttribute(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function sanitizeCertificates(certificates = []) {
+  return certificates
+    .map((certificate) => ({
+      name: String(certificate?.name || "").trim(),
+      issuer: String(certificate?.issuer || "").trim(),
+      date: String(certificate?.date || "").trim(),
+      number: String(certificate?.number || "").trim(),
+    }))
+    .filter((certificate) => Object.values(certificate).some(Boolean));
+}
+
+function getCertificatesFromResumeData(resumeData = {}) {
+  if (Array.isArray(resumeData.certificates)) {
+    return sanitizeCertificates(resumeData.certificates);
+  }
+
+  return sanitizeCertificates([
+    {
+      name: resumeData.certificateName,
+      issuer: resumeData.certificateIssuer,
+      date: resumeData.certificateDate,
+      number: resumeData.certificateNumber,
+    },
+  ]);
+}
+
+function getCertificateEntriesFromForm() {
+  if (!certificatesContainer) {
+    return [];
+  }
+
+  return Array.from(certificatesContainer.querySelectorAll("[data-certificate-item]")).map((item) => ({
+    name: String(item.querySelector("[data-field='name']")?.value || "").trim(),
+    issuer: String(item.querySelector("[data-field='issuer']")?.value || "").trim(),
+    date: String(item.querySelector("[data-field='date']")?.value || "").trim(),
+    number: String(item.querySelector("[data-field='number']")?.value || "").trim(),
+  }));
+}
+
+function buildCertificateCard(index, certificate = createEmptyCertificate()) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "subcard certificate-card";
+  wrapper.dataset.certificateItem = "true";
+  wrapper.innerHTML = `
+    <div class="section-toolbar">
+      <h3 class="subcard-title">자격증 ${index + 1}</h3>
+      <button type="button" class="remove-inline-button" data-remove-certificate>삭제</button>
+    </div>
+
+    <div class="inline-grid">
+      <div class="field">
+        <label>자격증명</label>
+        <input type="text" data-field="name" placeholder="정보처리기사" value="${escapeAttribute(certificate.name)}">
+      </div>
+
+      <div class="field">
+        <label>발급기관</label>
+        <input type="text" data-field="issuer" placeholder="한국산업인력공단" value="${escapeAttribute(certificate.issuer)}">
+      </div>
+    </div>
+
+    <div class="inline-grid">
+      <div class="field">
+        <label>취득일</label>
+        <input type="date" data-field="date" value="${escapeAttribute(certificate.date)}">
+      </div>
+
+      <div class="field">
+        <label>등록번호</label>
+        <input type="text" data-field="number" placeholder="1234-567890" value="${escapeAttribute(certificate.number)}">
+      </div>
+    </div>
+  `;
+
+  const removeButton = wrapper.querySelector("[data-remove-certificate]");
+  removeButton?.addEventListener("click", () => {
+    const entries = getCertificateEntriesFromForm();
+    entries.splice(index, 1);
+    renderCertificates(entries);
+  });
+
+  return wrapper;
+}
+
+function renderCertificates(certificates = [createEmptyCertificate()]) {
+  if (!certificatesContainer) {
+    return;
+  }
+
+  const normalizedCertificates = certificates.length > 0
+    ? certificates.map((certificate) => ({
+      ...createEmptyCertificate(),
+      ...certificate,
+    }))
+    : [createEmptyCertificate()];
+
+  certificatesContainer.replaceChildren(
+    ...normalizedCertificates.map((certificate, index) => buildCertificateCard(index, certificate)),
+  );
+}
 
 function setStatus(message, type = "") {
   statusElement.textContent = message;
   statusElement.className = `status ${type}`.trim();
 }
 
+function hasMeaningfulValue(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasMeaningfulValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.values(value).some((item) => hasMeaningfulValue(item));
+  }
+
+  return Boolean(String(value || "").trim());
+}
+
 function cloneTestResumeData() {
+  const certificates = sanitizeCertificates(TEST_RESUME_DATA.certificates);
+  const firstCertificate = certificates[0] || createEmptyCertificate();
+
   return {
     ...TEST_RESUME_DATA,
+    certificates,
+    certificateName: firstCertificate.name,
+    certificateIssuer: firstCertificate.issuer,
+    certificateDate: firstCertificate.date,
+    certificateNumber: firstCertificate.number,
   };
 }
 
@@ -110,6 +264,14 @@ function getResumeDataFromForm() {
     resumeData[element.name] = String(element.value || "").trim();
   });
 
+  const certificates = sanitizeCertificates(getCertificateEntriesFromForm());
+  const firstCertificate = certificates[0] || createEmptyCertificate();
+  resumeData.certificates = certificates;
+  resumeData.certificateName = firstCertificate.name;
+  resumeData.certificateIssuer = firstCertificate.issuer;
+  resumeData.certificateDate = firstCertificate.date;
+  resumeData.certificateNumber = firstCertificate.number;
+
   return resumeData;
 }
 
@@ -131,6 +293,9 @@ function populateForm(resumeData = {}) {
 
     element.value = resumeData[element.name] || "";
   });
+
+  const certificates = getCertificatesFromResumeData(resumeData);
+  renderCertificates(certificates.length > 0 ? certificates : [createEmptyCertificate()]);
 
   syncCareerFields();
 }
@@ -213,7 +378,7 @@ async function fillCurrentTab() {
   const resumeData = getResumeDataFromForm();
   const geminiApiKey = String(apiKeyInput.value || "").trim();
 
-  if (!Object.values(resumeData).some((value) => value === true || Boolean(value))) {
+  if (!Object.values(resumeData).some((value) => hasMeaningfulValue(value))) {
     setStatus("먼저 이력서 정보를 입력해 주세요.", "error");
     return false;
   }
@@ -292,6 +457,12 @@ async function applyLaunchState(state) {
   }, 150);
 }
 
+addCertificateButton?.addEventListener("click", () => {
+  const entries = getCertificateEntriesFromForm();
+  entries.push(createEmptyCertificate());
+  renderCertificates(entries);
+});
+
 loadTestDataButton.addEventListener("click", () => {
   populateTestData();
   setStatus("테스트 기본값을 폼에 채웠습니다.");
@@ -346,6 +517,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 document.addEventListener("DOMContentLoaded", async () => {
   try {
+    renderCertificates([createEmptyCertificate()]);
     await loadStoredResumeData();
 
     const result = await chrome.storage.local.get([SIDE_PANEL_STATE_KEY]);

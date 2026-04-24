@@ -173,6 +173,45 @@
       font-weight: 800;
     }
 
+    .section-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-toolbar p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .add-inline-button,
+    .remove-inline-button {
+      border-radius: 12px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .add-inline-button {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+
+    .remove-inline-button {
+      background: #fef2f2;
+      color: var(--danger);
+    }
+
+    .certificate-card {
+      background: #fff;
+    }
+
     .field {
       display: grid;
       gap: 6px;
@@ -777,29 +816,11 @@
                 <span class="accordion-caret" aria-hidden="true"></span>
               </button>
               <div class="accordion-body">
-                <div class="inline-grid">
-              <div class="field">
-                <label for="certificateName">자격증명</label>
-                <input id="certificateName" name="certificateName" type="text" placeholder="정보처리기사">
-              </div>
-
-              <div class="field">
-                <label for="certificateIssuer">발급기관</label>
-                <input id="certificateIssuer" name="certificateIssuer" type="text" placeholder="한국산업인력공단">
-              </div>
-            </div>
-
-            <div class="inline-grid">
-              <div class="field">
-                <label for="certificateDate">취득일</label>
-                <input id="certificateDate" name="certificateDate" type="date">
-              </div>
-
-              <div class="field">
-                <label for="certificateNumber">등록번호</label>
-                <input id="certificateNumber" name="certificateNumber" type="text" placeholder="1234-567890">
-              </div>
+                <div class="section-toolbar">
+                  <p>자격증은 여러 개까지 추가해 저장할 수 있습니다.</p>
+                  <button type="button" class="add-inline-button" id="addCertificateBtn">자격증 추가</button>
                 </div>
+                <div id="certificatesContainer"></div>
               </div>
             </section>
 
