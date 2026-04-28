@@ -265,6 +265,7 @@ class FormAnalyzer {
       window.scrollTo(originalX, originalY);
       await this.wait(100);
     }
+    console.log("FormFill AI: 페이지 스크린샷 캡처 수", screenshots.length);
 
     return screenshots;
   }
@@ -367,12 +368,13 @@ ${JSON.stringify(serializedInputs, null, 2)}
       throw new Error(response?.message || "Gemini 계획 생성에 실패했습니다.");
     }
 
+    console.log("FormFill AI: generatePlan 결과", plan);
+
     return response.plan;
   }
 
   async fillForm(resumeData) {
     const plan = await this.generatePlan(resumeData);
-    console.log("FormFill AI: generatePlan 결과", plan);
     this.analyzeInputs();
 
     const applied = [];
@@ -406,17 +408,59 @@ ${JSON.stringify(serializedInputs, null, 2)}
     };
   }
 
+  async attachProfilePhoto(profilePhoto) {
+    const normalizedPhoto = this.normalizeProfilePhoto(profilePhoto);
+    if (!normalizedPhoto) {
+      return {
+        attached: false,
+        reason: "등록된 사진 데이터가 없습니다.",
+      };
+    }
+
+    const input = this.findBestPhotoFileInput();
+    if (!input) {
+      throw new Error("페이지에서 사진 첨부용 파일 입력창을 찾지 못했습니다.");
+    }
+
+    const file = await this.createFileFromProfilePhoto(normalizedPhoto);
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+
+    input.scrollIntoView({ block: "center", inline: "nearest" });
+    await this.wait(60);
+    this.setNativeFiles(input, transfer.files);
+    this.dispatchFileEvents(input);
+
+    return {
+      attached: true,
+      fileName: file.name,
+      selector: this.buildSelector(input),
+    };
+  }
+
   async fillDynamicForm(resumeData) {
     console.log("FormFill AI: 동적 폼 자동 입력 시작");
     const history = [];
     const triggeredActionKeys = new Set();
     let lastChange = null;
     let lastDecision = null;
+    let cachedScreenshots = null;
 
     for (let step = 0; step < MAX_DYNAMIC_STEPS; step += 1) {
       const inputs = this.collectDynamicInputs();
       const actions = this.collectDynamicActions(triggeredActionKeys);
-      const screenshots = await this.capturePageScreenshots();
+      const shouldRecaptureScreenshots =
+        !cachedScreenshots ||
+        step === 0 ||
+        Boolean(lastChange?.changed);
+      const screenshots = shouldRecaptureScreenshots
+        ? await this.capturePageScreenshots()
+        : cachedScreenshots;
+
+      if (shouldRecaptureScreenshots) {
+        cachedScreenshots = screenshots;
+      }
+
       const decision = await this.requestDynamicDecision({
         resumeData,
         inputs,
@@ -456,6 +500,9 @@ ${JSON.stringify(serializedInputs, null, 2)}
         const change = await this.executeDynamicAction(actionData, decision.trigger || {});
         triggeredActionKeys.add(actionData.actionKey);
         lastChange = change;
+        if (change.changed) {
+          cachedScreenshots = null;
+        }
         history.push({
           step: step + 1,
           kind: "trigger",
@@ -512,6 +559,10 @@ ${JSON.stringify(serializedInputs, null, 2)}
           newInputKeys: applied.map((item) => item.inputKey),
           summary: `${applied.length}개 필드에 값을 입력했습니다.`,
         };
+
+        if (applied.length > 0) {
+          cachedScreenshots = null;
+        }
       }
     }
 
@@ -796,6 +847,8 @@ ${JSON.stringify(serializedInputs, null, 2)}
       throw new Error(response?.message || "동적 폼 판단에 실패했습니다.");
     }
 
+    console.log("FormFill AI: requestDynamicDecision 결과", response.plan);
+
     return response.plan;
   }
 
@@ -874,6 +927,12 @@ ${JSON.stringify(context.history || [], null, 2)}
 `.trim();
   }
 
+  /**
+   * LLM이 지정한 동적 요소에 이벤트를 수행하고, 페이지의 변화를 감지해서 요약 정보를 반환
+   * @param {*} actionData 
+   * @param {*} instruction 
+   * @returns 
+   */
   async executeDynamicAction(actionData, instruction) {
     const element = actionData?.element;
     if (!element) {
@@ -909,7 +968,7 @@ ${JSON.stringify(context.history || [], null, 2)}
   }
 
   /**
-   * 
+   * actionType에 따라 click, select, check 등의 이벤트를 수행
    * @param {*} element 
    * @param {*} actionData 
    * @param {*} instruction 
@@ -946,12 +1005,18 @@ ${JSON.stringify(context.history || [], null, 2)}
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   }
 
+  /**
+   * 페이지의 변화를 감지하기위한 요소들을 추출해서 반환
+   * @returns 
+   */
   buildPageFingerprint() {
     const rootText = (document.body?.innerText || "")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 800);
 
+    // !@#$ url과 title이 바뀔 경우가 있을지? 
+    // !@#$ 페이지 전체 text를 가져와서 800자만 쓰면 변화 감지에 한계가 있지 않을까?
     return {
       url: window.location.href,
       title: document.title,
@@ -961,6 +1026,11 @@ ${JSON.stringify(context.history || [], null, 2)}
     };
   }
 
+  /**
+   * 새로 생기거나 없어진 태그가 있는지 text fingerprint과 함께 비교해서 변화 요약을 반환
+   * @param {*} payload 
+   * @returns 
+   */
   summarizeDynamicChange(payload) {
     const beforeInputKeys = new Set((payload.beforeInputs || []).map((item) => item.inputKey));
     const afterInputKeys = new Set((payload.afterInputs || []).map((item) => item.inputKey));
@@ -994,7 +1064,7 @@ ${JSON.stringify(context.history || [], null, 2)}
   }
 
   /**
-   * tagname과 type에 따라 값을 입력함(성공, 실패 여부 반환)
+   * tagname과 type에 따라 값을 자동으로 입력함(성공, 실패 여부 반환)
    * @param {Element} element 
    * @param {String} value 
    * @param {Object} field 
@@ -1170,6 +1240,112 @@ ${JSON.stringify(context.history || [], null, 2)}
     return text;
   }
 
+  normalizeProfilePhoto(profilePhoto = null) {
+    if (!profilePhoto || typeof profilePhoto !== "object") {
+      return null;
+    }
+
+    const dataUrl = String(profilePhoto.dataUrl || "").trim();
+    if (!dataUrl.startsWith("data:image/")) {
+      return null;
+    }
+
+    return {
+      name: String(profilePhoto.name || "profile-photo").trim() || "profile-photo",
+      type: String(profilePhoto.type || "image/jpeg").trim() || "image/jpeg",
+      lastModified: Number(profilePhoto.lastModified || 0) || Date.now(),
+      dataUrl,
+    };
+  }
+
+  async createFileFromProfilePhoto(profilePhoto) {
+    const response = await fetch(profilePhoto.dataUrl);
+    const blob = await response.blob();
+    return new File([blob], profilePhoto.name, {
+      type: profilePhoto.type || blob.type || "image/jpeg",
+      lastModified: profilePhoto.lastModified || Date.now(),
+    });
+  }
+
+  findBestPhotoFileInput() {
+    const candidates = Array.from(document.querySelectorAll("input[type='file']"))
+      .map((element, index) => ({
+        element,
+        score: this.scorePhotoFileInput(element, index),
+      }))
+      .filter((item) => item.score > Number.NEGATIVE_INFINITY)
+      .sort((left, right) => right.score - left.score);
+
+    return candidates[0]?.element || null;
+  }
+
+  scorePhotoFileInput(element, index) {
+    if (!element || element.disabled) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    let score = 0;
+    const accept = String(element.getAttribute("accept") || "").toLowerCase();
+    const summary = this.normalizeText([
+      element.id,
+      element.name,
+      element.className,
+      element.getAttribute("aria-label"),
+      this.findLabelFor(element),
+      this.getSectionText(element),
+      this.getAssociatedLabelText(element),
+    ].join(" "));
+
+    if (accept.includes("image")) {
+      score += 7;
+    } else if (!accept || [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"].some((token) => accept.includes(token))) {
+      score += 3;
+    } else {
+      score -= 3;
+    }
+
+    if (/(사진|증명|프로필|이미지|photo|image|picture|portrait|avatar)/.test(summary)) {
+      score += 10;
+    }
+
+    if (/(이력서|지원서|인적사항|face|profile)/.test(summary)) {
+      score += 4;
+    }
+
+    if (/(첨부|등록|업로드|upload|attach)/.test(summary)) {
+      score += 3;
+    }
+
+    if (/(사업자|계약서|첨부파일|pdf|doc|excel|zip)/.test(summary)) {
+      score -= 6;
+    }
+
+    if (this.isVisibleElement(element)) {
+      score += 2;
+    }
+
+    score -= Math.min(index, 8);
+    return score;
+  }
+
+  getAssociatedLabelText(element) {
+    if (!element) {
+      return "";
+    }
+
+    const parentLabel = element.closest("label");
+    if (parentLabel?.innerText?.trim()) {
+      return parentLabel.innerText.trim();
+    }
+
+    const precedingLabel = element.previousElementSibling;
+    if (precedingLabel?.tagName === "LABEL" && precedingLabel.innerText?.trim()) {
+      return precedingLabel.innerText.trim();
+    }
+
+    return "";
+  }
+
   /**
    * descriptor가 있는 경우 set으로 값변경 아닌경우 직접 할당
    * @param {Element} element 
@@ -1192,6 +1368,16 @@ ${JSON.stringify(context.history || [], null, 2)}
     }
 
     element.value = value;
+  }
+
+  setNativeFiles(element, files) {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files");
+    if (descriptor?.set) {
+      descriptor.set.call(element, files);
+      return;
+    }
+
+    element.files = files;
   }
 
   setNativeChecked(element, checked) {
@@ -1222,6 +1408,11 @@ ${JSON.stringify(context.history || [], null, 2)}
       element.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
+    this.dispatchChangeEvents(element);
+  }
+
+  dispatchFileEvents(element) {
+    element.dispatchEvent(new Event("input", { bubbles: true }));
     this.dispatchChangeEvents(element);
   }
 
@@ -1321,6 +1512,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       } catch (error) {
         console.error("FormFill AI: fill 실패", error);
         sendResponse({ status: "error", message: error.message || "폼 자동 입력에 실패했습니다." });
+      }
+    })();
+
+    return true;
+  }
+
+  if (request.action === "attachPhoto") {
+    (async () => {
+      try {
+        const result = await formAnalyzer.attachProfilePhoto(request.data || {});
+        sendResponse({ status: "success", data: result });
+      } catch (error) {
+        console.error("FormFill AI: attachPhoto 실패", error);
+        sendResponse({ status: "error", message: error.message || "사진 첨부에 실패했습니다." });
       }
     })();
 

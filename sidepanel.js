@@ -83,8 +83,15 @@ const careerEndDateInput = document.getElementById("careerEndDate");
 const accordionTriggers = Array.from(document.querySelectorAll("[data-accordion-trigger]"));
 const certificatesContainer = document.getElementById("certificatesContainer");
 const addCertificateButton = document.getElementById("addCertificateBtn");
+const profilePhotoInput = document.getElementById("profilePhotoInput");
+const selectPhotoButton = document.getElementById("selectPhotoBtn");
+const clearPhotoButton = document.getElementById("clearPhotoBtn");
+const photoPreviewFrame = document.getElementById("photoPreviewFrame");
+const profilePhotoPreview = document.getElementById("profilePhotoPreview");
+const photoMeta = document.getElementById("photoMeta");
 
 let lastHandledRequestedAt = 0;
+let currentProfilePhoto = null;
 
 function createEmptyCertificate() {
   return {
@@ -93,6 +100,91 @@ function createEmptyCertificate() {
     date: "",
     number: "",
   };
+}
+
+function sanitizeProfilePhoto(profilePhoto = null) {
+  if (!profilePhoto || typeof profilePhoto !== "object") {
+    return null;
+  }
+
+  const dataUrl = String(profilePhoto.dataUrl || "").trim();
+  if (!dataUrl.startsWith("data:image/")) {
+    return null;
+  }
+
+  return {
+    name: String(profilePhoto.name || "profile-photo").trim() || "profile-photo",
+    type: String(profilePhoto.type || "image/jpeg").trim() || "image/jpeg",
+    size: Number(profilePhoto.size || 0) || 0,
+    lastModified: Number(profilePhoto.lastModified || 0) || Date.now(),
+    dataUrl,
+  };
+}
+
+function formatFileSize(size = 0) {
+  if (!size) {
+    return "";
+  }
+
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)}MB`;
+  }
+
+  if (size >= 1024) {
+    return `${Math.round(size / 1024)}KB`;
+  }
+
+  return `${size}B`;
+}
+
+function updatePhotoPreview(profilePhoto = null) {
+  currentProfilePhoto = sanitizeProfilePhoto(profilePhoto);
+
+  if (!photoPreviewFrame || !profilePhotoPreview || !photoMeta) {
+    return;
+  }
+
+  if (!currentProfilePhoto) {
+    photoPreviewFrame.classList.remove("has-image");
+    profilePhotoPreview.removeAttribute("src");
+    photoMeta.textContent = "아직 등록된 사진이 없습니다.";
+    return;
+  }
+
+  photoPreviewFrame.classList.add("has-image");
+  profilePhotoPreview.src = currentProfilePhoto.dataUrl;
+  photoMeta.textContent = [currentProfilePhoto.name, formatFileSize(currentProfilePhoto.size)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("파일을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function setProfilePhotoFromFile(file) {
+  if (!file) {
+    updatePhotoPreview(null);
+    return;
+  }
+
+  if (!String(file.type || "").startsWith("image/")) {
+    throw new Error("이미지 파일만 등록할 수 있습니다.");
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  updatePhotoPreview({
+    name: file.name,
+    type: file.type || "image/jpeg",
+    size: file.size || 0,
+    lastModified: file.lastModified || Date.now(),
+    dataUrl,
+  });
 }
 
 function escapeAttribute(value) {
@@ -271,6 +363,7 @@ function getResumeDataFromForm() {
   resumeData.certificateIssuer = firstCertificate.issuer;
   resumeData.certificateDate = firstCertificate.date;
   resumeData.certificateNumber = firstCertificate.number;
+  resumeData.profilePhoto = currentProfilePhoto ? { ...currentProfilePhoto } : null;
 
   return resumeData;
 }
@@ -296,6 +389,7 @@ function populateForm(resumeData = {}) {
 
   const certificates = getCertificatesFromResumeData(resumeData);
   renderCertificates(certificates.length > 0 ? certificates : [createEmptyCertificate()]);
+  updatePhotoPreview(resumeData.profilePhoto);
 
   syncCareerFields();
 }
@@ -332,6 +426,7 @@ async function clearFormAndStorage() {
   form.reset();
   populateForm({});
   apiKeyInput.value = "";
+  profilePhotoInput.value = "";
 
   await chrome.storage.local.remove([RESUME_STORAGE_KEY, GEMINI_API_KEY_STORAGE_KEY]);
   setStatus("입력값과 저장된 데이터를 모두 비웠습니다.", "success");
@@ -400,6 +495,18 @@ async function fillCurrentTab() {
   }
 
   setStatus("현재 페이지를 분석하고 입력을 시작합니다.");
+
+  if (resumeData.profilePhoto?.dataUrl) {
+    const photoResponse = await chrome.tabs.sendMessage(tab.id, {
+      action: "attachPhoto",
+      data: resumeData.profilePhoto,
+    });
+
+    if (photoResponse?.status !== "success") {
+      setStatus(photoResponse?.message || "페이지 사진 첨부에 실패했습니다.", "error");
+      return false;
+    }
+  }
 
   const response = await chrome.tabs.sendMessage(tab.id, {
     action: "fill",
@@ -474,6 +581,36 @@ clearButton.addEventListener("click", async () => {
   } catch (error) {
     console.error("FormFill AI: 초기화 실패", error);
     setStatus("입력값을 비우지 못했습니다.", "error");
+  }
+});
+
+selectPhotoButton?.addEventListener("click", () => {
+  profilePhotoInput?.click();
+});
+
+clearPhotoButton?.addEventListener("click", () => {
+  if (profilePhotoInput) {
+    profilePhotoInput.value = "";
+  }
+
+  updatePhotoPreview(null);
+  setStatus("등록한 사진을 비웠습니다.");
+});
+
+profilePhotoInput?.addEventListener("change", async (event) => {
+  try {
+    const file = event.target?.files?.[0];
+    await setProfilePhotoFromFile(file);
+    if (file) {
+      setStatus("증명사진을 등록했습니다. 저장 후 자동 입력을 실행해 보세요.");
+    }
+  } catch (error) {
+    console.error("FormFill AI: 사진 등록 실패", error);
+    if (profilePhotoInput) {
+      profilePhotoInput.value = "";
+    }
+    updatePhotoPreview(null);
+    setStatus(error.message || "사진을 등록하지 못했습니다.", "error");
   }
 });
 

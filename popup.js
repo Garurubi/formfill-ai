@@ -29,9 +29,11 @@ async function openSidePanel(mode, autoFill = false) {
     enabled: true,
   });
 
-  await chrome.sidePanel.open({
-    tabId: tab.id,
-  });
+  if (mode === "info"){
+    await chrome.sidePanel.open({
+      tabId: tab.id,
+    });
+  };
 }
 
 openInfoButton.addEventListener("click", async () => {

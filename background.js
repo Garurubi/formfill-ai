@@ -94,6 +94,7 @@ async function generateGeminiPlan(payload = {}) {
     { text: prompt },
   ];
 
+  let start_time = Date.now();
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
     {
@@ -114,6 +115,7 @@ async function generateGeminiPlan(payload = {}) {
       }),
     },
   );
+  console.log("FormFill AI: Gemini API 응답 시간", Date.now() - start_time, "ms");
 
   if (!response.ok) {
     const errorText = await response.text();
